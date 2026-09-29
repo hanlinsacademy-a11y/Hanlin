@@ -1223,6 +1223,63 @@ body.modal-open {
 .room-detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .room-detail-grid>div{padding:13px;border:1px solid var(--border);border-radius:11px;background:#fafbfd}
 .room-detail-grid span{display:block;color:#667085;font-size:12px}
+
+.room-maintenance-panel{
+  margin-top:16px;
+  padding:14px;
+  border:1px solid #dbe3ee;
+  border-radius:12px;
+  background:#f8fafc;
+}
+.room-maintenance-panel.is-hidden{display:none}
+.room-maintenance-panel label{
+  display:block;
+  margin-bottom:7px;
+  color:#475467;
+  font-size:12px;
+  font-weight:700;
+}
+.room-maintenance-panel input{
+  width:100%;
+  height:42px;
+  padding:0 12px;
+  border:1px solid #cfd8e3;
+  border-radius:10px;
+  background:#fff;
+  font:inherit;
+}
+.room-maintenance-panel small{
+  display:block;
+  margin-top:8px;
+  color:#667085;
+  line-height:1.45;
+}
+.room-maintenance-actions{
+  display:flex;
+  gap:10px;
+  margin-top:12px;
+}
+.room-maintenance-toggle{
+  flex:1;
+  min-height:42px;
+  border:0;
+  border-radius:10px;
+  padding:10px 14px;
+  font-weight:800;
+  cursor:pointer;
+}
+.room-maintenance-toggle.close-room{
+  background:#b42318;
+  color:#fff;
+}
+.room-maintenance-toggle.open-room{
+  background:#147d3a;
+  color:#fff;
+}
+.room-maintenance-toggle:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
 @media(max-width:850px){.all-room-status-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.room-modal-summary,.room-detail-grid,.all-room-status-grid{grid-template-columns:1fr}}
 
@@ -12025,6 +12082,7 @@ function renderActiveClassesModal_(items) {
       values.push({
         key,
         name:
+          item.teacherDisplay ||
           item.teacher ||
           key
       });
@@ -12619,7 +12677,9 @@ function renderActiveClassesModal_(items) {
           payload: {
             sourceClass:
               schedulerSelectedClass,
-            targetDate
+            targetDate,
+            action:
+              getSchedulerAction_()
           }
         }
       );
@@ -12648,7 +12708,11 @@ function renderActiveClassesModal_(items) {
 
       node.textContent =
         option.available
-          ? `${option.time} — ว่าง ${option.availableRooms.length} ห้อง`
+          ? (
+              option.teacherSpecialOpen
+                ? `${option.time} — เปิดพิเศษวันนี้ • ว่าง ${option.availableRooms.length} ห้อง`
+                : `${option.time} — ว่าง ${option.availableRooms.length} ห้อง`
+            )
           : `${option.time} — ${option.message}`;
 
       node.disabled = !option.available;
@@ -12666,9 +12730,21 @@ function renderActiveClassesModal_(items) {
         ? 'scheduler-availability available'
         : 'scheduler-availability unavailable';
 
+    const specialOpenCount =
+      schedulerAvailabilityOptions.filter(
+        (item) =>
+          item.available &&
+          item.teacherSpecialOpen
+      ).length;
+
     box.textContent =
       available.length
-        ? `พบช่วงเวลาที่จองได้ ${available.length} ช่วงเวลา`
+        ? (
+            getSchedulerAction_() === 'MAKEUP' &&
+            specialOpenCount > 0
+              ? `พบช่วงเวลาที่จองได้ ${available.length} ช่วงเวลา • เปิดพิเศษวันนี้ ${specialOpenCount} ช่วงเวลา`
+              : `พบช่วงเวลาที่จองได้ ${available.length} ช่วงเวลา`
+          )
         : 'ไม่พบเวลาที่ครู นักเรียน และห้องว่างพร้อมกัน';
 
     document.getElementById('schedulerSaveButton').disabled = true;
@@ -14804,7 +14880,7 @@ function renderActiveClassesModal_(items) {
     document.getElementById('teacherSlotsContent').innerHTML =
       '<div class="teacher-slots-empty">กำลังโหลดตารางเวลาสอน...</div>';
 
-    setText('teacherSlotsFooterText', ' ');
+    setText('teacherSlotsFooterText', ' ');
 
     loadTeacherSlots_();
   }
@@ -15020,7 +15096,7 @@ function renderActiveClassesModal_(items) {
               : 'ทำรายการไม่สำเร็จ'
           );
 
-          setText('teacherSlotsFooterText', ' ');
+          setText('teacherSlotsFooterText', ' ');
 
           return;
         }
@@ -15028,7 +15104,7 @@ function renderActiveClassesModal_(items) {
         const result = response.data || response;
 
         showToast(result.message || 'บันทึกเรียบร้อยแล้ว');
-        setText('teacherSlotsFooterText', ' ');
+        setText('teacherSlotsFooterText', ' ');
 
         loadTeacherSlots_();
       })
@@ -15041,7 +15117,7 @@ function renderActiveClassesModal_(items) {
             : 'ทำรายการไม่สำเร็จ'
         );
 
-        setText('teacherSlotsFooterText', ' ');
+        setText('teacherSlotsFooterText', ' ');
       })
       .hanlinApi(
         'teacher.slots.toggle',
@@ -15394,6 +15470,9 @@ function renderHourlyAvailableRooms(data) {
   renderFreeRoomsForTime_(selectedRoomTime, roomList, schedule);
 }
 
+let currentRoomMaintenanceItem_ = null;
+
+
 function changeRoomTime(time) {
   selectedRoomTime = time || '';
   const data = dashboardData || {};
@@ -15580,10 +15659,18 @@ function buildRoomStatuses_(time, rooms, schedule) {
   });
 
   return rooms.map(room => {
-    const disabled = ['ปิดใช้งาน','inactive','disabled','ปิด']
-      .includes(String(room.status || '').toLowerCase());
+    const disabled =
+      room.maintenanceClosed === true ||
+      ['ปิดใช้งาน','inactive','disabled','ปิด']
+        .includes(String(room.status || '').toLowerCase());
 
-    if (disabled) return {...room,state:'unavailable',classItem:null};
+    if (disabled) {
+      return {
+        ...room,
+        state:'unavailable',
+        classItem:null
+      };
+    }
 
     const classItem = used[normalizeRoomCode_(room.roomId)] || null;
     return classItem
@@ -15601,7 +15688,15 @@ function normalizeMasterRoomList_(rooms) {
       room:item.room || item.Room || '',
       building:item.building || item['อาคาร'] || '',
       capacity:item.capacity || item['จำนวนที่นั่ง'] || '',
-      status:item.status || item['สถานะ'] || ''
+      status:item.status || item['สถานะ'] || '',
+      maintenanceClosed:
+        item.maintenanceClosed === true,
+      maintenanceReason:
+        item.maintenanceReason || '',
+      maintenanceClosureId:
+        item.maintenanceClosureId || '',
+      maintenanceDate:
+        item.maintenanceDate || ''
     };
   }).filter(item => {
     const key = normalizeRoomCode_(item.roomId);
@@ -15706,7 +15801,18 @@ function renderAllRoomsModal_() {
     <article class="all-room-card ${item.state}" onclick="openRoomDetailModal('${escapeJsString_(item.roomId)}')">
       <h3>${escapeHtml(item.roomId)}</h3>
       <p>${roomStateLabel_(item.state)}</p>
-      <p>${item.classItem ? `${escapeHtml(item.classItem.teacher || '—')} | ${escapeHtml(item.classItem.student || '—')}` : escapeHtml(item.building ? `อาคาร ${item.building}` : '—')}</p>
+      <p>${
+        item.maintenanceClosed
+          ? escapeHtml(
+              item.maintenanceReason ||
+              'ปิดใช้งานชั่วคราว'
+            )
+          : (
+              item.classItem
+                ? `${escapeHtml(item.classItem.teacher || '—')} | ${escapeHtml(item.classItem.student || '—')}`
+                : escapeHtml(item.building ? `อาคาร ${item.building}` : '—')
+            )
+      }</p>
     </article>
   `).join('');
 }
@@ -15719,25 +15825,342 @@ function openRoomDetailModal(roomId) {
     Array.isArray(data.schedule) ? data.schedule : []
   );
 
-  const item = statuses.find(x => normalizeRoomCode_(x.roomId) === normalizeRoomCode_(roomId));
-  if (!item) return showToast('ไม่พบข้อมูลห้อง');
+  const item = statuses.find(
+    x =>
+      normalizeRoomCode_(x.roomId) ===
+      normalizeRoomCode_(roomId)
+  );
+
+  if (!item) {
+    return showToast('ไม่พบข้อมูลห้อง');
+  }
+
+  currentRoomMaintenanceItem_ = item;
 
   const detail = item.classItem || {};
-  setText('roomDetailTitle', `ห้อง ${item.roomId}`);
-  setText('roomDetailSubtitle', formatPeriodDisplay_(selectedRoomTime));
-  setText('roomDetailBuilding', item.building || '—');
-  setText('roomDetailCapacity', item.capacity ? `${item.capacity} ที่นั่ง` : '—');
-  setText('roomDetailTeacher', detail.teacher || '—');
-  setText('roomDetailStudent', detail.student || '—');
-  setText('roomDetailClassStatus', detail.status || roomStateLabel_(item.state));
-  setText('roomDetailPeriod', formatPeriodDisplay_(selectedRoomTime));
 
-  const statusEl = document.getElementById('roomDetailStatus');
-  statusEl.className = `room-detail-status ${item.state}`;
-  statusEl.textContent = roomStateLabel_(item.state);
+  setText(
+    'roomDetailTitle',
+    `ห้อง ${item.roomId}`
+  );
 
-  document.getElementById('roomDetailModal').classList.remove('is-hidden');
-  document.body.classList.add('modal-open');
+  setText(
+    'roomDetailSubtitle',
+    formatPeriodDisplay_(selectedRoomTime)
+  );
+
+  setText(
+    'roomDetailBuilding',
+    item.building || '—'
+  );
+
+  setText(
+    'roomDetailCapacity',
+    item.capacity
+      ? `${item.capacity} ที่นั่ง`
+      : '—'
+  );
+
+  setText(
+    'roomDetailTeacher',
+    detail.teacher || '—'
+  );
+
+  setText(
+    'roomDetailStudent',
+    detail.student || '—'
+  );
+
+  setText(
+    'roomDetailClassStatus',
+    item.maintenanceClosed
+      ? (
+          'ปิดใช้งาน' +
+          (
+            item.maintenanceReason
+              ? ` — ${item.maintenanceReason}`
+              : ''
+          )
+        )
+      : (
+          detail.status ||
+          roomStateLabel_(item.state)
+        )
+  );
+
+  setText(
+    'roomDetailPeriod',
+    formatPeriodDisplay_(selectedRoomTime)
+  );
+
+  const statusEl =
+    document.getElementById(
+      'roomDetailStatus'
+    );
+
+  statusEl.className =
+    `room-detail-status ${item.state}`;
+
+  statusEl.textContent =
+    item.maintenanceClosed
+      ? (
+          'ปิดใช้งาน' +
+          (
+            item.maintenanceReason
+              ? ` — ${item.maintenanceReason}`
+              : ''
+          )
+        )
+      : roomStateLabel_(item.state);
+
+  renderRoomMaintenanceControls_(item);
+
+  document
+    .getElementById('roomDetailModal')
+    .classList.remove('is-hidden');
+
+  document.body.classList.add(
+    'modal-open'
+  );
+}
+
+
+function renderRoomMaintenanceControls_(item) {
+  const panel =
+    document.getElementById(
+      'roomMaintenancePanel'
+    );
+
+  if (!panel) {
+    return;
+  }
+
+  const role =
+    String(
+      currentUser &&
+      currentUser.role
+        ? currentUser.role
+        : ''
+    ).toUpperCase();
+
+  const canManage =
+    role === 'ADMIN' ||
+    role === 'MANAGER';
+
+  panel.classList.toggle(
+    'is-hidden',
+    !canManage
+  );
+
+  if (!canManage) {
+    return;
+  }
+
+  const reason =
+    document.getElementById(
+      'roomMaintenanceReason'
+    );
+
+  const button =
+    document.getElementById(
+      'roomMaintenanceToggleButton'
+    );
+
+  if (reason) {
+    reason.value =
+      item &&
+      item.maintenanceClosed
+        ? (
+            item.maintenanceReason ||
+            ''
+          )
+        : '';
+  }
+
+  if (button) {
+    const closed =
+      Boolean(
+        item &&
+        item.maintenanceClosed
+      );
+
+    button.disabled = false;
+
+    button.className =
+      'room-maintenance-toggle ' +
+      (
+        closed
+          ? 'open-room'
+          : 'close-room'
+      );
+
+    button.innerHTML =
+      closed
+        ? (
+            '<span class="material-symbols-rounded">door_open</span> ' +
+            'เปิดใช้งานห้องนี้'
+          )
+        : (
+            '<span class="material-symbols-rounded">construction</span> ' +
+            'ปิดห้องและย้ายคาบอัตโนมัติ'
+          );
+  }
+}
+
+
+function toggleRoomMaintenance_() {
+  const item =
+    currentRoomMaintenanceItem_;
+
+  if (!item) {
+    showToast('ไม่พบข้อมูลห้อง');
+    return;
+  }
+
+  const token =
+    localStorage.getItem(
+      HANLIN_TOKEN_KEY
+    );
+
+  const date =
+    selectedDashboardDate ||
+    (
+      new Date()
+        .toISOString()
+        .slice(0, 10)
+    );
+
+  const isClosed =
+    Boolean(
+      item.maintenanceClosed
+    );
+
+  const nextClosed =
+    !isClosed;
+
+  const reasonInput =
+    document.getElementById(
+      'roomMaintenanceReason'
+    );
+
+  const reason =
+    reasonInput
+      ? reasonInput.value.trim()
+      : '';
+
+  if (
+    nextClosed &&
+    !reason
+  ) {
+    showToast(
+      'กรุณาระบุเหตุผล เช่น ซ่อมแซม'
+    );
+
+    if (reasonInput) {
+      reasonInput.focus();
+    }
+
+    return;
+  }
+
+  const message =
+    nextClosed
+      ? (
+          `ยืนยันปิดห้อง ${item.roomId} วันที่ ${date} ?\n` +
+          'ระบบจะย้ายคาบที่อยู่ในห้องนี้ไปยังห้องว่างอื่นอัตโนมัติ'
+        )
+      : (
+          `ยืนยันเปิดห้อง ${item.roomId} วันที่ ${date} ?\n` +
+          'คาบที่เคยถูกย้ายไปแล้วจะไม่ย้ายกลับอัตโนมัติ'
+        );
+
+  if (!window.confirm(message)) {
+    return;
+  }
+
+  const button =
+    document.getElementById(
+      'roomMaintenanceToggleButton'
+    );
+
+  if (button) {
+    button.disabled = true;
+  }
+
+  google.script.run
+    .withSuccessHandler((response) => {
+      if (button) {
+        button.disabled = false;
+      }
+
+      if (
+        !response ||
+        response.success === false
+      ) {
+        showToast(
+          response &&
+          response.message
+            ? response.message
+            : 'ทำรายการไม่สำเร็จ'
+        );
+
+        return;
+      }
+
+      const result =
+        response.data ||
+        response;
+
+      let toastText =
+        result.message ||
+        'บันทึกเรียบร้อยแล้ว';
+
+      if (
+        result.unresolvedCount > 0
+      ) {
+        toastText +=
+          ` — มี ${result.unresolvedCount} คาบที่ยังไม่มีห้องว่าง`;
+      }
+
+      showToast(toastText);
+
+      closeRoomDetailModal();
+
+      /*
+       * โหลด Dashboard ใหม่
+       * เพื่อเห็นห้องปิด/เปิด และห้องใหม่ของคาบที่ถูกย้าย
+       */
+      loadSecureDashboard(false);
+
+    })
+    .withFailureHandler((error) => {
+      if (button) {
+        button.disabled = false;
+      }
+
+      showToast(
+        error &&
+        error.message
+          ? error.message
+          : 'ทำรายการไม่สำเร็จ'
+      );
+    })
+    .hanlinApi(
+      'room.maintenance.set',
+      {
+        token,
+        payload: {
+          date,
+          roomId:
+            item.roomId,
+          closed:
+            nextClosed,
+          reason,
+          autoMove:
+            true
+        }
+      }
+    );
 }
 
 function closeRoomDetailModal() {
@@ -23969,6 +24392,40 @@ function escapeJsString_(value) {
         <div><span>นักเรียน</span><strong id="roomDetailStudent">—</strong></div>
         <div><span>สถานะการเรียน</span><strong id="roomDetailClassStatus">—</strong></div>
         <div><span>ช่วงเวลา</span><strong id="roomDetailPeriod">—</strong></div>
+      </div>
+
+      <div
+        id="roomMaintenancePanel"
+        class="room-maintenance-panel is-hidden"
+      >
+        <label for="roomMaintenanceReason">
+          เหตุผลที่ปิดห้อง
+        </label>
+
+        <input
+          id="roomMaintenanceReason"
+          type="text"
+          placeholder="เช่น ซ่อมแซม, ระบบไฟขัดข้อง, ทำความสะอาด"
+          autocomplete="off"
+        >
+
+        <small>
+          การปิดห้องมีผลเฉพาะวันที่กำลังดูอยู่
+          และระบบจะพยายามย้ายทุกคาบในห้องนี้
+          ไปยังห้องอื่นที่ว่างในช่วงเวลาเดิมโดยอัตโนมัติ
+        </small>
+
+        <div class="room-maintenance-actions">
+          <button
+            id="roomMaintenanceToggleButton"
+            type="button"
+            class="room-maintenance-toggle close-room"
+            onclick="toggleRoomMaintenance_()"
+          >
+            <span class="material-symbols-rounded">construction</span>
+            ปิดห้องและย้ายคาบอัตโนมัติ
+          </button>
+        </div>
       </div>
     </div>
 
