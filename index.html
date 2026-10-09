@@ -8370,7 +8370,6 @@ body.modal-open {
 
 
 </style>
-
 <script>
 // Hanlin GitHub Pages → Google Apps Script API bridge
 const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXqbMM6C9x3G5L9DN1JILyx43BVQ3EjyEKjI8wF4KzqZDy2wY-O-Io/exec';
@@ -11946,7 +11945,7 @@ function renderActiveClassesModal_(items) {
     schedulerAvailabilityOptions = [];
 
     document.getElementById('schedulerTeacherSelect').innerHTML =
-      '<option value="">เลือกครู</option>';
+      '<option value="">เลือกวิชาและครู</option>';
 
     const classSelect =
       document.getElementById('schedulerClassSelect');
@@ -12037,7 +12036,7 @@ function renderActiveClassesModal_(items) {
         setText(
           'schedulerFooterText',
           schedulerSourceSchedule.length
-            ? 'เลือกครูผู้สอน'
+            ? 'เลือกวิชาและครูผู้สอน'
             : 'วันที่เลือกไม่มีคาบเรียน'
         );
       })
@@ -12063,49 +12062,113 @@ function renderActiveClassesModal_(items) {
         'schedulerTeacherSelect'
       );
 
-    const values = [];
+    const groups = {};
     const found = {};
 
     schedulerSourceSchedule.forEach((item) => {
-      const key = String(
+      const teacherKey = String(
         item.teacherId ||
         item.teacher ||
         ''
       ).trim();
 
-      if (!key || found[key]) {
+      if (!teacherKey) {
         return;
       }
 
-      found[key] = true;
+      const subjectLabel =
+        schedulerSubjectLabel_(item);
 
-      values.push({
-        key,
+      const subjectKey =
+        schedulerSubjectKey_(item);
+
+      const uniqueKey =
+        subjectKey + '\u0001' +
+        teacherKey.toLowerCase();
+
+      if (found[uniqueKey]) {
+        return;
+      }
+
+      found[uniqueKey] = true;
+
+      if (!groups[subjectKey]) {
+        groups[subjectKey] = {
+          label: subjectLabel,
+          teachers: []
+        };
+      }
+
+      groups[subjectKey].teachers.push({
+        key: teacherKey,
         name:
           item.teacherDisplay ||
           item.teacher ||
-          key
+          teacherKey
       });
     });
 
-    values.sort((left, right) =>
-      String(left.name).localeCompare(
-        String(right.name),
-        'th',
-        {
-          numeric: true,
-          sensitivity: 'base'
-        }
-      )
-    );
+    select.innerHTML = '';
 
-    select.innerHTML =
-      '<option value="">เลือกครู</option>' +
-      values.map((teacher) => `
-        <option value="${escapeHtml(teacher.key)}">
-          ${escapeHtml(teacher.name)}
-        </option>
-      `).join('');
+    const placeholder =
+      document.createElement('option');
+
+    placeholder.value = '';
+    placeholder.textContent =
+      'เลือกวิชาและครู';
+
+    select.appendChild(placeholder);
+
+    Object.keys(groups)
+      .sort((left, right) =>
+        groups[left].label.localeCompare(
+          groups[right].label,
+          'th',
+          {
+            numeric: true,
+            sensitivity: 'base'
+          }
+        )
+      )
+      .forEach((subjectKey) => {
+        const group = groups[subjectKey];
+
+        group.teachers.sort((left, right) =>
+          String(left.name).localeCompare(
+            String(right.name),
+            'th',
+            {
+              numeric: true,
+              sensitivity: 'base'
+            }
+          )
+        );
+
+        const optgroup =
+          document.createElement('optgroup');
+
+        optgroup.label =
+          `${group.label} (${group.teachers.length} ครู)`;
+
+        group.teachers.forEach((teacher) => {
+          const option =
+            document.createElement('option');
+
+          option.value = teacher.key;
+          option.textContent = teacher.name;
+          option.dataset.subjectKey =
+            subjectKey;
+
+          optgroup.appendChild(option);
+        });
+
+        select.appendChild(optgroup);
+      });
+
+    if (!Object.keys(groups).length) {
+      placeholder.textContent =
+        'วันที่เลือกไม่มีคาบเรียน';
+    }
 
     const classSelect =
       document.getElementById(
@@ -12119,11 +12182,46 @@ function renderActiveClassesModal_(items) {
   }
 
 
+  function schedulerSubjectLabel_(item) {
+    return String(
+      (
+        item &&
+        (
+          item.subjectName ||
+          item.subject ||
+          item.subjectId
+        )
+      ) || ''
+    ).trim() || 'ไม่ระบุวิชา';
+  }
+
+
+  function schedulerSubjectKey_(item) {
+    return schedulerSubjectLabel_(item)
+      .toLocaleLowerCase('th')
+      .replace(/\s+/g, '');
+  }
+
+
   function selectSchedulerTeacher() {
-    const teacherKey =
+    const teacherSelect =
       document.getElementById(
         'schedulerTeacherSelect'
-      ).value;
+      );
+
+    const teacherKey =
+      teacherSelect.value;
+
+    const selectedOption =
+      teacherSelect.options[
+        teacherSelect.selectedIndex
+      ];
+
+    const subjectKey =
+      selectedOption &&
+      selectedOption.dataset
+        ? selectedOption.dataset.subjectKey || ''
+        : '';
 
     const classSelect =
       document.getElementById(
@@ -12136,7 +12234,7 @@ function renderActiveClassesModal_(items) {
       .getElementById('schedulerClassSummary')
       .classList.add('is-hidden');
 
-    if (!teacherKey) {
+    if (!teacherKey || !subjectKey) {
       classSelect.innerHTML =
         '<option value="">เลือกคาบเรียน</option>';
 
@@ -12144,7 +12242,7 @@ function renderActiveClassesModal_(items) {
 
       setText(
         'schedulerFooterText',
-        'กรุณาเลือกครู'
+        'กรุณาเลือกวิชาและครู'
       );
       return;
     }
@@ -12155,7 +12253,9 @@ function renderActiveClassesModal_(items) {
           item.teacherId ||
           item.teacher ||
           ''
-        ).trim() === teacherKey
+        ).trim() === teacherKey &&
+        schedulerSubjectKey_(item) ===
+          subjectKey
       );
 
     classSelect.innerHTML =
@@ -12174,7 +12274,7 @@ function renderActiveClassesModal_(items) {
 
     setText(
       'schedulerFooterText',
-      'เลือกคาบเรียนของครู'
+      `เลือกคาบเรียนวิชา ${schedulerSubjectLabel_(filtered[0])}`
     );
   }
 
@@ -24491,12 +24591,12 @@ function escapeJsString_(value) {
           </label>
 
           <label>
-            ครูผู้สอน
+            ครูผู้สอน (แยกตามวิชา)
             <select
               id="schedulerTeacherSelect"
               onchange="selectSchedulerTeacher()"
             >
-              <option value="">เลือกครู</option>
+              <option value="">เลือกวิชาและครู</option>
             </select>
           </label>
 
