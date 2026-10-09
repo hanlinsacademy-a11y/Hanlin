@@ -9394,11 +9394,21 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
       </section>
 
       <section class="role-panel manager-schedule-panel">
-        <header>
+        <header class="schedule-panel-header">
           <div>
             <span class="material-symbols-rounded">calendar_month</span>
             <h2>ตารางเรียน</h2>
           </div>
+
+          <label class="schedule-time-filter">
+            <span>เวลา</span>
+            <select
+              id="managerScheduleTimeFilter"
+              onchange="selectManagerScheduleTime(this.value)"
+            >
+              <option value="">ทุกช่วงเวลา</option>
+            </select>
+          </label>
         </header>
 
         <div class="table-wrap">
@@ -9637,6 +9647,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
   let dashboardData = null;
   let showAllSchedule = false;
   let selectedScheduleTime = '';
+  let selectedManagerScheduleTime = '';
   let refreshTimer = null;
   let currentUser = null;
   let selectedDashboardDate = '';
@@ -10695,6 +10706,76 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
   }
 
 
+  function renderManagerScheduleTimeFilter_(items) {
+    const select =
+      document.getElementById(
+        'managerScheduleTimeFilter'
+      );
+
+    if (!select) {
+      return;
+    }
+
+    const timeOptions = Array.from(
+      new Set(
+        items
+          .map((item) =>
+            String(item.time || '').trim()
+          )
+          .filter(Boolean)
+      )
+    ).sort((left, right) => {
+      const leftTime = parseTime(left);
+      const rightTime = parseTime(right);
+      const leftStart = Number.isFinite(leftTime.start)
+        ? leftTime.start
+        : 9999;
+      const rightStart = Number.isFinite(rightTime.start)
+        ? rightTime.start
+        : 9999;
+
+      if (leftStart !== rightStart) {
+        return leftStart - rightStart;
+      }
+
+      return left.localeCompare(right, 'th', {
+        numeric: true,
+        sensitivity: 'base'
+      });
+    });
+
+    if (
+      selectedManagerScheduleTime &&
+      !timeOptions.includes(
+        selectedManagerScheduleTime
+      )
+    ) {
+      selectedManagerScheduleTime = '';
+    }
+
+    select.innerHTML =
+      '<option value="">ทุกช่วงเวลา</option>' +
+      timeOptions.map((time) => `
+        <option value="${escapeHtml(time)}">
+          ${escapeHtml(time)}
+        </option>
+      `).join('');
+
+    select.value = selectedManagerScheduleTime;
+    select.disabled = !timeOptions.length;
+  }
+
+
+  function selectManagerScheduleTime(value) {
+    selectedManagerScheduleTime =
+      String(value || '').trim();
+
+    if (dashboardData) {
+      renderManagerRoleDashboard_(dashboardData);
+    }
+  }
+
+
   function renderManagerRoleDashboard_(data) {
     const counts = data.counts || {};
     const schedule = sortScheduleByTime_(
@@ -10702,6 +10783,17 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
         ? data.schedule
         : []
     );
+
+    renderManagerScheduleTimeFilter_(schedule);
+
+    const visibleSchedule =
+      selectedManagerScheduleTime
+        ? schedule.filter(
+            (item) =>
+              String(item.time || '').trim() ===
+              selectedManagerScheduleTime
+          )
+        : schedule;
 
     const activeNow = Array.isArray(data.activeNow)
       ? data.activeNow
@@ -10737,18 +10829,22 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
 
     if (!body) return;
 
-    if (!schedule.length) {
+    if (!visibleSchedule.length) {
       body.innerHTML = `
         <tr>
           <td colspan="5">
-            <div class="role-empty">วันนี้ไม่มีตารางเรียน</div>
+            <div class="role-empty">${
+              selectedManagerScheduleTime
+                ? 'ไม่มีตารางเรียนในช่วงเวลาที่เลือก'
+                : 'วันนี้ไม่มีตารางเรียน'
+            }</div>
           </td>
         </tr>
       `;
       return;
     }
 
-    body.innerHTML = schedule.map((item) => `
+    body.innerHTML = visibleSchedule.map((item) => `
       <tr>
         <td>${escapeHtml(item.time || '—')}</td>
         <td>${escapeHtml(item.teacher || '—')}</td>
