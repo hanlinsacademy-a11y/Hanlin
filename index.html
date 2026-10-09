@@ -466,6 +466,46 @@
     padding: 16px 18px;
   }
 
+  .schedule-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .schedule-time-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .schedule-time-filter select {
+    min-width: 150px;
+    padding: 9px 34px 9px 11px;
+    color: #24384d;
+    border: 1px solid #d7dee8;
+    border-radius: 10px;
+    background: #ffffff;
+    cursor: pointer;
+  }
+
+  @media (max-width: 560px) {
+    .schedule-time-filter {
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .schedule-time-filter select {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
   .panel-header > div {
     display: flex;
     align-items: center;
@@ -9217,11 +9257,21 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
 
       <section class="bottom-grid">
         <article id="todayScheduleSection" class="panel schedule-panel">
-          <header class="panel-header">
+          <header class="panel-header schedule-panel-header">
             <div>
               <span class="material-symbols-rounded">calendar_month</span>
               <h2>ตารางเรียน</h2>
             </div>
+
+            <label class="schedule-time-filter">
+              <span>เวลา</span>
+              <select
+                id="scheduleTimeFilter"
+                onchange="selectScheduleTime(this.value)"
+              >
+                <option value="">ทุกช่วงเวลา</option>
+              </select>
+            </label>
           </header>
 
           <div class="table-wrap">
@@ -9586,6 +9636,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
 
   let dashboardData = null;
   let showAllSchedule = false;
+  let selectedScheduleTime = '';
   let refreshTimer = null;
   let currentUser = null;
   let selectedDashboardDate = '';
@@ -11307,10 +11358,92 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
     );
   }
 
+  function renderScheduleTimeFilter_(items) {
+  const select = document.getElementById('scheduleTimeFilter');
+
+  if (!select) {
+    return;
+  }
+
+  const timeOptions = Array.from(
+    new Set(
+      items
+        .map((item) => String(item.time || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => {
+    const leftTime = parseTime(left);
+    const rightTime = parseTime(right);
+    const leftStart = Number.isFinite(leftTime.start)
+      ? leftTime.start
+      : 9999;
+    const rightStart = Number.isFinite(rightTime.start)
+      ? rightTime.start
+      : 9999;
+
+    if (leftStart !== rightStart) {
+      return leftStart - rightStart;
+    }
+
+    return left.localeCompare(right, 'th', {
+      numeric: true,
+      sensitivity: 'base'
+    });
+  });
+
+  if (
+    selectedScheduleTime &&
+    !timeOptions.includes(selectedScheduleTime)
+  ) {
+    selectedScheduleTime = '';
+  }
+
+  select.innerHTML =
+    '<option value="">ทุกช่วงเวลา</option>' +
+    timeOptions.map((time) => `
+      <option value="${escapeHtml(time)}">
+        ${escapeHtml(time)}
+      </option>
+    `).join('');
+
+  select.value = selectedScheduleTime;
+  select.disabled = !timeOptions.length;
+}
+
+  function selectScheduleTime(value) {
+  selectedScheduleTime = String(value || '').trim();
+  showAllSchedule = false;
+
+  setText(
+    'toggleScheduleText',
+    'ดูตารางวันนี้ทั้งหมด'
+  );
+
+  renderSchedule(
+    dashboardData && Array.isArray(dashboardData.schedule)
+      ? dashboardData.schedule
+      : []
+  );
+}
+
   function renderSchedule(items) {
   const body = document.getElementById('todayScheduleBody');
 
-  const sortedItems = [...items].sort((left, right) => {
+  const sourceItems = Array.isArray(items)
+    ? items
+    : [];
+
+  renderScheduleTimeFilter_(sourceItems);
+
+  const filteredItems = selectedScheduleTime
+    ? sourceItems.filter(
+        (item) =>
+          String(item.time || '').trim() ===
+          selectedScheduleTime
+      )
+    : sourceItems;
+
+  const sortedItems = [...filteredItems].sort((left, right) => {
     const leftTime = parseTime(left.time);
     const rightTime = parseTime(right.time);
 
