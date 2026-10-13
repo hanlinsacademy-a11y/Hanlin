@@ -16304,6 +16304,11 @@ function renderRoomMaintenanceControls_(item) {
       'roomMaintenanceToggleButton'
     );
 
+  const retryButton =
+    document.getElementById(
+      'roomMaintenanceRetryButton'
+    );
+
   if (reason) {
     reason.value =
       item &&
@@ -16342,6 +16347,20 @@ function renderRoomMaintenanceControls_(item) {
             '<span class="material-symbols-rounded">construction</span> ' +
             'ปิดห้องและย้ายคาบอัตโนมัติ'
           );
+  }
+
+  if (retryButton) {
+    const closed =
+      Boolean(
+        item &&
+        item.maintenanceClosed
+      );
+
+    retryButton.disabled = false;
+    retryButton.classList.toggle(
+      'is-hidden',
+      !closed
+    );
   }
 }
 
@@ -16421,14 +16440,27 @@ function toggleRoomMaintenance_() {
       'roomMaintenanceToggleButton'
     );
 
+  const retryButton =
+    document.getElementById(
+      'roomMaintenanceRetryButton'
+    );
+
   if (button) {
     button.disabled = true;
+  }
+
+  if (retryButton) {
+    retryButton.disabled = true;
   }
 
   google.script.run
     .withSuccessHandler((response) => {
       if (button) {
         button.disabled = false;
+      }
+
+      if (retryButton) {
+        retryButton.disabled = false;
       }
 
       if (
@@ -16476,6 +16508,10 @@ function toggleRoomMaintenance_() {
         button.disabled = false;
       }
 
+      if (retryButton) {
+        retryButton.disabled = false;
+      }
+
       showToast(
         error &&
         error.message
@@ -16496,6 +16532,146 @@ function toggleRoomMaintenance_() {
           reason,
           autoMove:
             true
+        }
+      }
+    );
+}
+
+
+function retryRoomMaintenanceMove_() {
+  const item =
+    currentRoomMaintenanceItem_;
+
+  if (
+    !item ||
+    !item.maintenanceClosed
+  ) {
+    showToast(
+      'ห้องนี้ไม่ได้อยู่ในสถานะปิดใช้งาน'
+    );
+    return;
+  }
+
+  const date =
+    selectedDashboardDate ||
+    (
+      new Date()
+        .toISOString()
+        .slice(0, 10)
+    );
+
+  if (
+    !window.confirm(
+      `ลองย้ายคาบที่ยังอยู่ในห้อง ${item.roomId} วันที่ ${date} อีกครั้ง?`
+    )
+  ) {
+    return;
+  }
+
+  const token =
+    localStorage.getItem(
+      HANLIN_TOKEN_KEY
+    );
+
+  const reasonInput =
+    document.getElementById(
+      'roomMaintenanceReason'
+    );
+
+  const retryButton =
+    document.getElementById(
+      'roomMaintenanceRetryButton'
+    );
+
+  const toggleButton =
+    document.getElementById(
+      'roomMaintenanceToggleButton'
+    );
+
+  if (retryButton) {
+    retryButton.disabled = true;
+  }
+
+  if (toggleButton) {
+    toggleButton.disabled = true;
+  }
+
+  google.script.run
+    .withSuccessHandler((response) => {
+      if (retryButton) {
+        retryButton.disabled = false;
+      }
+
+      if (toggleButton) {
+        toggleButton.disabled = false;
+      }
+
+      if (
+        !response ||
+        response.success === false
+      ) {
+        showToast(
+          response && response.message
+            ? response.message
+            : 'ย้ายคาบที่ค้างไม่สำเร็จ'
+        );
+        return;
+      }
+
+      const result =
+        response.data ||
+        response;
+
+      let message =
+        result.message ||
+        'ตรวจสอบคาบที่ค้างเรียบร้อยแล้ว';
+
+      if (
+        result.unresolvedCount > 0 &&
+        Array.isArray(result.unresolved) &&
+        result.unresolved[0] &&
+        result.unresolved[0].reason
+      ) {
+        message +=
+          ' — ' +
+          result.unresolved[0].reason;
+      }
+
+      showToast(message);
+      closeRoomDetailModal();
+      loadSecureDashboard(false);
+    })
+    .withFailureHandler((error) => {
+      if (retryButton) {
+        retryButton.disabled = false;
+      }
+
+      if (toggleButton) {
+        toggleButton.disabled = false;
+      }
+
+      showToast(
+        error && error.message
+          ? error.message
+          : 'ย้ายคาบที่ค้างไม่สำเร็จ'
+      );
+    })
+    .hanlinApi(
+      'room.maintenance.set',
+      {
+        token,
+        payload: {
+          date,
+          roomId: item.roomId,
+          closed: true,
+          reason:
+            reasonInput
+              ? reasonInput.value.trim()
+              : (
+                  item.maintenanceReason ||
+                  'ปิดใช้งานชั่วคราว'
+                ),
+          autoMove: true
         }
       }
     );
@@ -24754,6 +24930,16 @@ function escapeJsString_(value) {
         </small>
 
         <div class="room-maintenance-actions">
+          <button
+            id="roomMaintenanceRetryButton"
+            type="button"
+            class="room-maintenance-toggle close-room is-hidden"
+            onclick="retryRoomMaintenanceMove_()"
+          >
+            <span class="material-symbols-rounded">drive_file_move</span>
+            ย้ายคาบที่ค้างอีกครั้ง
+          </button>
+
           <button
             id="roomMaintenanceToggleButton"
             type="button"
