@@ -2667,77 +2667,133 @@ body.modal-open {
     color: #2c4a86;
   }
 
-  .teacher-slots-day-tabs {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding-bottom: 4px;
+  .teacher-slots-modal-card {
+    width: min(1240px, calc(100vw - 24px));
   }
 
-  .teacher-slots-day-tab {
-    flex: 0 0 auto;
-    border: 1px solid #d8dee8;
-    background: #ffffff;
-    border-radius: 999px;
-    padding: 7px 14px;
+  .teacher-slots-section {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .teacher-slots-matrix-scroll {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .teacher-slots-matrix {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 6px;
+    table-layout: fixed;
+  }
+
+  .teacher-slots-day-cell {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: 116px;
+    min-width: 116px;
+    max-width: 116px;
+    padding: 9px 10px;
+    border: 1px solid #e2e7ef;
+    border-radius: 9px;
+    background: #f8fafc;
+    box-shadow: 5px 0 8px rgba(255, 255, 255, 0.88);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .teacher-slots-day-name,
+  .teacher-slots-day-meta {
+    display: block;
+  }
+
+  .teacher-slots-day-name {
+    color: #344054;
     font-size: 12.5px;
-    font-weight: 600;
-    color: #4a5568;
-    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .teacher-slots-day-meta {
+    margin-top: 3px;
+    overflow: hidden;
+    color: #98a2b3;
+    font-size: 9.5px;
+    font-weight: 500;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .teacher-slots-day-tab.is-active {
-    background: #2c4a86;
-    border-color: #2c4a86;
-    color: #ffffff;
+  .teacher-slots-period-cell {
+    width: 104px;
+    min-width: 104px;
+    padding: 0;
+    vertical-align: middle;
   }
 
-  .teacher-slots-day-tab .teacher-slots-day-tab-count {
-    opacity: 0.7;
-    font-weight: 500;
-    margin-left: 2px;
-  }
-
-  .teacher-slots-block {
-    border: 1px solid #e4e8f0;
-    border-radius: 12px;
-    padding: 12px;
-    margin-top: 12px;
-  }
-
-  .teacher-slots-block-title {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: #2c4a86;
-    margin-bottom: 10px;
-  }
-
-  .teacher-slots-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .teacher-slots-period-cell.is-empty {
+    height: 76px;
   }
 
   .teacher-slots-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 104px;
+    min-width: 104px;
+    min-height: 76px;
     border-radius: 10px;
-    border: 1px solid #d8dee8;
+    border: 1px solid #dce3ec;
     background: #ffffff;
-    padding: 8px 10px;
-    font-size: 12px;
-    font-weight: 600;
+    padding: 7px 8px;
+    font-family: inherit;
     color: #33404f;
     cursor: pointer;
     text-align: center;
-    line-height: 1.5;
-    min-width: 92px;
+    line-height: 1.25;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .teacher-slots-chip:not(:disabled):hover {
+    border-color: #8eacd6;
+    box-shadow: 0 4px 10px rgba(49, 91, 159, 0.12);
+    transform: translateY(-1px);
+  }
+
+  .teacher-slots-period-name,
+  .teacher-slots-period-time,
+  .teacher-slots-chip-status {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .teacher-slots-period-name {
+    color: #344054;
+    font-size: 11.5px;
+    font-weight: 800;
+  }
+
+  .teacher-slots-period-time {
+    color: #98a2b3;
+    font-size: 9.5px;
+    font-weight: 500;
   }
 
   .teacher-slots-chip .teacher-slots-chip-status {
-    display: block;
-    font-size: 10.5px;
-    font-weight: 600;
-    margin-top: 2px;
+    margin-top: 3px;
+    font-size: 9.5px;
+    font-weight: 700;
   }
 
   .teacher-slots-chip.status-open {
@@ -2765,7 +2821,6 @@ body.modal-open {
     border-color: #c7d9fb;
     color: #2c4a86;
     cursor: not-allowed;
-    opacity: 0.9;
   }
 
   .teacher-slots-chip.status-booked .teacher-slots-chip-status {
@@ -2774,8 +2829,8 @@ body.modal-open {
   }
 
   .teacher-slots-chip:disabled {
-    opacity: 0.6;
-    cursor: wait;
+    opacity: 1;
+    cursor: not-allowed;
   }
 
   .teacher-slots-empty {
@@ -2783,6 +2838,25 @@ body.modal-open {
     text-align: center;
     color: #8a94a6;
     font-size: 12.5px;
+  }
+
+  @media (max-width: 700px) {
+    .teacher-slots-section {
+      padding: 8px;
+    }
+
+    .teacher-slots-day-cell {
+      width: 104px;
+      min-width: 104px;
+      max-width: 104px;
+      padding: 8px;
+    }
+
+    .teacher-slots-period-cell,
+    .teacher-slots-chip {
+      width: 96px;
+      min-width: 96px;
+    }
   }
 
   @media (max-width: 700px) {
@@ -15187,7 +15261,6 @@ function renderActiveClassesModal_(items) {
   ];
 
   let teacherSlotsData_ = null;
-  let teacherSlotsActiveDay_ = TEACHER_SLOTS_DAY_ORDER[0];
   let teacherSlotsBusy_ = false;
 
 
@@ -15205,15 +15278,12 @@ function renderActiveClassesModal_(items) {
     }
 
     teacherSlotsData_ = null;
-    teacherSlotsActiveDay_ = TEACHER_SLOTS_DAY_ORDER[0];
 
     document
       .getElementById('teacherSlotsModal')
       .classList.remove('is-hidden');
 
     document.body.classList.add('modal-open');
-
-    document.getElementById('teacherSlotsDayTabs').innerHTML = '';
 
     document.getElementById('teacherSlotsContent').innerHTML =
       '<div class="teacher-slots-empty">กำลังโหลดตารางเวลาสอน...</div>';
@@ -15265,21 +15335,6 @@ function renderActiveClassesModal_(items) {
         const result = response.data || response;
 
         teacherSlotsData_ = result;
-
-        const hasDay =
-          (result.days || []).some((d) => d.day === teacherSlotsActiveDay_);
-
-        if (!hasDay) {
-          const firstWithBlocks =
-            (result.days || []).find((d) => (d.blocks || []).length > 0);
-
-          teacherSlotsActiveDay_ =
-            firstWithBlocks
-              ? firstWithBlocks.day
-              : TEACHER_SLOTS_DAY_ORDER[0];
-        }
-
-        renderTeacherSlotsDayTabs_();
         renderTeacherSlotsContent_();
       })
       .withFailureHandler((error) => {
@@ -15299,56 +15354,6 @@ function renderActiveClassesModal_(items) {
   }
 
 
-  function findTeacherSlotsDayData_(dayName) {
-    if (!teacherSlotsData_) return null;
-
-    return (teacherSlotsData_.days || []).find(
-      (d) => d.day === dayName
-    ) || null;
-  }
-
-
-  function renderTeacherSlotsDayTabs_() {
-    const container = document.getElementById('teacherSlotsDayTabs');
-
-    container.innerHTML = TEACHER_SLOTS_DAY_ORDER.map((day) => {
-      const dayData = findTeacherSlotsDayData_(day);
-
-      const count =
-        dayData
-          ? (dayData.blocks || []).reduce(
-              (sum, b) => sum + (b.slots || []).length,
-              0
-            )
-          : 0;
-
-      const activeClass =
-        day === teacherSlotsActiveDay_ ? ' is-active' : '';
-
-      return `
-        <button
-          type="button"
-          class="teacher-slots-day-tab${activeClass}"
-          onclick="selectTeacherSlotsDay_('${escapeHtml(day)}')"
-        >
-          ${escapeHtml(day)}${
-            count > 0
-              ? `<span class="teacher-slots-day-tab-count">(${count})</span>`
-              : ''
-          }
-        </button>
-      `;
-    }).join('');
-  }
-
-
-  function selectTeacherSlotsDay_(day) {
-    teacherSlotsActiveDay_ = day;
-    renderTeacherSlotsDayTabs_();
-    renderTeacherSlotsContent_();
-  }
-
-
   function teacherSlotStatusLabel_(status) {
     if (status === 'closed') return 'ปิด';
     if (status === 'booked') return 'มีนักเรียนจอง';
@@ -15358,41 +15363,107 @@ function renderActiveClassesModal_(items) {
 
   function renderTeacherSlotsContent_() {
     const container = document.getElementById('teacherSlotsContent');
-    const dayData = findTeacherSlotsDayData_(teacherSlotsActiveDay_);
+    const daysByName = {};
 
-    if (!dayData || !(dayData.blocks || []).length) {
+    (teacherSlotsData_ && teacherSlotsData_.days || []).forEach((dayData) => {
+      daysByName[dayData.day] = dayData;
+    });
+
+    const rows = [];
+
+    TEACHER_SLOTS_DAY_ORDER.forEach((day) => {
+      const dayData = daysByName[day];
+
+      (dayData && dayData.blocks || []).forEach((block) => {
+        const slots = (block.slots || []).slice().sort(
+          (a, b) => Number(a.column) - Number(b.column)
+        );
+
+        if (slots.length) {
+          rows.push({
+            day,
+            subjectCode: block.subjectCode || '',
+            rowIndex: block.rowIndex,
+            slots
+          });
+        }
+      });
+    });
+
+    if (!rows.length) {
       container.innerHTML =
-        '<div class="teacher-slots-empty">ไม่มีคาบสอนของคุณในวันนี้</div>';
+        '<div class="teacher-slots-empty">ไม่พบช่วงเวลาสอนของคุณ</div>';
 
       return;
     }
 
-    container.innerHTML = dayData.blocks.map((block) => `
-      <div class="teacher-slots-block">
-        <div class="teacher-slots-block-title">
-          วิชา/กลุ่ม ${escapeHtml(block.subjectCode || '—')}
-        </div>
-        <div class="teacher-slots-grid">
-          ${block.slots.map((slot) => `
-            <button
-              type="button"
-              class="teacher-slots-chip status-${slot.status}"
-              data-row="${block.rowIndex}"
-              data-column="${slot.column}"
-              onclick="onTeacherSlotChipClick_(${block.rowIndex}, ${slot.column}, '${slot.status}')"
-              ${slot.status === 'booked' ? 'disabled' : ''}
-            >
-              ${escapeHtml(slot.time || '')}
-              <span class="teacher-slots-chip-status">${
-                slot.status === 'booked'
-                  ? escapeHtml(slot.studentText || teacherSlotStatusLabel_(slot.status))
-                  : teacherSlotStatusLabel_(slot.status)
-              }</span>
-            </button>
-          `).join('')}
-        </div>
+    const maxPeriods = rows.reduce(
+      (max, row) => Math.max(max, row.slots.length),
+      0
+    );
+
+    container.innerHTML = `
+      <div class="teacher-slots-matrix-scroll">
+        <table class="teacher-slots-matrix">
+          <tbody>
+            ${rows.map((row) => {
+              const openCount = row.slots.filter(
+                (slot) => slot.status !== 'closed' && slot.status !== 'booked'
+              ).length;
+
+              const cells = row.slots.map((slot, index) => {
+                const status =
+                  slot.status === 'closed' || slot.status === 'booked'
+                    ? slot.status
+                    : 'open';
+
+                const statusText =
+                  status === 'booked'
+                    ? (slot.studentText || teacherSlotStatusLabel_(status))
+                    : teacherSlotStatusLabel_(status);
+
+                return `
+                  <td class="teacher-slots-period-cell">
+                    <button
+                      type="button"
+                      class="teacher-slots-chip status-${status}"
+                      data-row="${row.rowIndex}"
+                      data-column="${slot.column}"
+                      onclick="onTeacherSlotChipClick_(${row.rowIndex}, ${slot.column}, '${status}')"
+                      title="${escapeHtml(statusText)}"
+                      ${status === 'booked' ? 'disabled' : ''}
+                    >
+                      <span class="teacher-slots-period-name">คาบ ${index + 1}</span>
+                      <span class="teacher-slots-period-time">${escapeHtml(slot.time || '')}</span>
+                      <span class="teacher-slots-chip-status">${escapeHtml(statusText)}</span>
+                    </button>
+                  </td>
+                `;
+              }).join('');
+
+              const emptyCells = Array.from(
+                { length: maxPeriods - row.slots.length },
+                () => '<td class="teacher-slots-period-cell is-empty" aria-hidden="true"></td>'
+              ).join('');
+
+              return `
+                <tr>
+                  <th scope="row" class="teacher-slots-day-cell">
+                    <span class="teacher-slots-day-name">${escapeHtml(row.day)}</span>
+                    <span class="teacher-slots-day-meta">${
+                      row.subjectCode
+                        ? `${escapeHtml(row.subjectCode)} · `
+                        : ''
+                    }เปิด ${openCount}/${row.slots.length}</span>
+                  </th>
+                  ${cells}${emptyCells}
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
       </div>
-    `).join('');
+    `;
   }
 
 
@@ -25397,7 +25468,7 @@ function escapeJsString_(value) {
   class="modal-overlay is-hidden"
   onclick="closeTeacherSlotsOverlay(event)"
 >
-  <section class="modal-card scheduler-modal-card">
+  <section class="modal-card scheduler-modal-card teacher-slots-modal-card">
     <header class="modal-header scheduler-modal-header">
       <div>
         <div class="modal-title-row">
@@ -25424,8 +25495,7 @@ function escapeJsString_(value) {
         </div>
       </section>
 
-      <section class="scheduler-section">
-        <div id="teacherSlotsDayTabs" class="teacher-slots-day-tabs"></div>
+      <section class="scheduler-section teacher-slots-section">
         <div id="teacherSlotsContent">
           <div class="teacher-slots-empty">กำลังโหลดตารางเวลาสอน...</div>
         </div>
