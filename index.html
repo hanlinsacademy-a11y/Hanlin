@@ -15916,7 +15916,24 @@ function normalizeRoomCode_(value) {
   return String(value || '').trim().replace(/\s+/g, '').toUpperCase();
 }
 
+function isOnlineRoomCode_(value) {
+  const roomCode = normalizeRoomCode_(value);
+
+  return (
+    roomCode.includes('ออนไลน์') ||
+    roomCode.includes('ONLINE') ||
+    roomCode.includes('VIRTUAL')
+  );
+}
+
 function compareRoomCodes_(left, right) {
+  const leftOnline = isOnlineRoomCode_(left);
+  const rightOnline = isOnlineRoomCode_(right);
+
+  if (leftOnline !== rightOnline) {
+    return leftOnline ? 1 : -1;
+  }
+
   return String(left || '').localeCompare(
     String(right || ''),
     'th',
@@ -16067,6 +16084,13 @@ function normalizeRoomCode_(value) {
 }
 
 function compareRoomCodes_(a,b) {
+  const leftOnline = isOnlineRoomCode_(a);
+  const rightOnline = isOnlineRoomCode_(b);
+
+  if (leftOnline !== rightOnline) {
+    return leftOnline ? 1 : -1;
+  }
+
   return String(a || '').localeCompare(String(b || ''),'th',{numeric:true,sensitivity:'base'});
 }
 
