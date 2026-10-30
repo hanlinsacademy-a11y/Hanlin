@@ -8569,6 +8569,20 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
 })();
 </script>
 
+<style>
+.hanlin-teacher-phone { margin-top: 5px; font-size: 12px; line-height: 1.45; }
+.hanlin-teacher-phone a { color: #1767b7; text-decoration: none; font-weight: 600; white-space: nowrap; }
+.hanlin-teacher-phone a:hover { text-decoration: underline; }
+.hanlin-teacher-phone a:focus-visible { outline: 2px solid #1767b7; outline-offset: 3px; border-radius: 3px; }
+</style>
+
+<style id="hanlin-student-directory-style">
+.hanlin-student-info{display:flex;align-items:center;gap:8px;min-width:125px}
+.hanlin-student-avatar{width:42px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #d9e2ec;flex-shrink:0}
+.hanlin-guardian-phone{font-size:12px;margin-top:4px;color:#64748b;white-space:normal}
+.hanlin-guardian-phone a{color:#126ab1;font-weight:600;text-decoration:none}
+.hanlin-guardian-phone a:hover{text-decoration:underline}
+</style>
 </head>
 
 <body>
@@ -9357,6 +9371,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
                   <th>นักเรียน</th>
                   <th>ห้อง</th>
                   <th>สถานะ</th>
+                  <th>หมายเหตุ</th>
                 </tr>
               </thead>
 
@@ -9494,6 +9509,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
                 <th>นักเรียน</th>
                 <th>ห้อง</th>
                 <th>สถานะ</th>
+                  <th>หมายเหตุ</th>
               </tr>
             </thead>
             <tbody id="managerScheduleBody"></tbody>
@@ -9694,6 +9710,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
                 <th>นักเรียน</th>
                 <th>ห้อง</th>
                 <th>สถานะ</th>
+                  <th>หมายเหตุ</th>
               </tr>
             </thead>
 
@@ -10213,7 +10230,11 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
           currentUser;
 
         applyRoleUi(currentUser);
+        if (hanlinNotesState_.date === hanlinNotesDate_()) hanlinNotesState_.loaded = false;
         renderDashboard(dashboardData);
+        hanlinNotesLoad_();
+        hanlinTeacherPhoneLoad_();
+        try { hanlinStudentDirectoryLoad_(); } catch (err) { console.warn(err); }
 
         document
           .getElementById('loading')
@@ -10686,13 +10707,15 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
       return;
     }
 
-    if (role === 'MANAGER') {
-      renderManagerRoleDashboard_(data);
-      updateLastUpdate_(data);
+    // ADMIN and MANAGER share the same dashboard and rendering logic.
+    // User permissions remain determined by the actual logged-in role.
+    if (role === 'ADMIN' || role === 'MANAGER') {
+      renderAdminRoleDashboard_(data);
       return;
     }
 
-    renderAdminRoleDashboard_(data);
+    // Do not show the administrative dashboard to unknown roles.
+    updateLastUpdate_(data);
   }
 
 
@@ -10709,14 +10732,14 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
     if (adminView) {
       adminView.classList.toggle(
         'is-hidden',
-        role !== 'ADMIN'
+        role !== 'ADMIN' && role !== 'MANAGER'
       );
     }
 
     if (managerView) {
       managerView.classList.toggle(
         'is-hidden',
-        role !== 'MANAGER'
+        true // Legacy manager view is retained but not displayed.
       );
     }
 
@@ -10906,7 +10929,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
     if (!visibleSchedule.length) {
       body.innerHTML = `
         <tr>
-          <td colspan="5">
+          <td colspan="6">
             <div class="role-empty">${
               selectedManagerScheduleTime
                 ? 'ไม่มีตารางเรียนในช่วงเวลาที่เลือก'
@@ -10921,8 +10944,8 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
     body.innerHTML = visibleSchedule.map((item) => `
       <tr>
         <td>${escapeHtml(item.time || '—')}</td>
-        <td>${escapeHtml(item.teacher || '—')}</td>
-        <td>${escapeHtml(item.student || '—')}</td>
+        <td>${hanlinTeacherPhoneCell_(item)}</td>
+        <td>${hanlinStudentCell_(item)}</td>
         <td>${escapeHtml(displayRoom(item))}</td>
         <td>
           ${statusPill(item)}
@@ -10932,11 +10955,8 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
               ? `<div class="teacher-substitute-owner">เจ้าของคาบ: ${escapeHtml(item.originalTeacher)}</div>`
               : ''
           }
-          <div class="teacher-schedule-note">
-            <strong>หมายเหตุ:</strong>
-            ${escapeHtml(item.note || '-')}
-          </div>
         </td>
+        <td>${hanlinNotesView_(item, true)}</td>
       </tr>
     `).join('');
   }
@@ -11378,7 +11398,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
     if (!schedule.length) {
       body.innerHTML = `
         <tr>
-          <td colspan="4">
+          <td colspan="5">
             <div class="role-empty">
               วันนี้ไม่มีตารางสอน
             </div>
@@ -11406,6 +11426,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
               : ''
           }
         </td>
+        <td>${hanlinNotesView_(item, false)}</td>
       </tr>
     `).join('');
   }
@@ -11596,6 +11617,98 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
   );
 }
 
+
+  // Contact numbers from the Teachers master sheet, keyed by TeacherID.
+  let hanlinTeacherPhoneState_ = { loaded: false, pending: false, byId: {}, byName: {} };
+  function hanlinTeacherPhoneNorm_(value) {
+    return String(value == null ? '' : value).trim().toLocaleLowerCase('th').replace(/\s+/g, '');
+  }
+  function hanlinTeacherPhoneCell_(item) {
+    const name = escapeHtml(item.teacher || '—');
+    const id = hanlinTeacherPhoneNorm_(item.teacherId || item.TeacherID);
+    // Fallback to a name ONLY if uniquely matched in master Teachers.
+    const byName = hanlinTeacherPhoneState_.byName[hanlinTeacherPhoneNorm_(item.teacher)];
+    const phone = (id && hanlinTeacherPhoneState_.byId[id]) || (byName && byName.unique ? byName.phone : '');
+    if (!phone) return name;
+    const dial = String(phone).replace(/[^0-9+]/g, '');
+    if (!/^\+?[0-9]{8,15}$/.test(dial)) return name;
+    return name + `<div class="hanlin-teacher-phone"><a href="tel:${escapeHtml(dial)}" aria-label="โทรหาครู ${name} หมายเลข ${escapeHtml(phone)}" title="โทรออก">☎ ${escapeHtml(phone)}</a></div>`;
+  }
+  function hanlinTeacherPhoneRerender_() {
+    if (!dashboardData) return;
+    if (typeof renderSchedule === 'function') renderSchedule(dashboardData.schedule || []);
+    // The legacy manager layout is kept for compatibility.
+    if (String(currentUser && currentUser.role || '').toUpperCase() === 'MANAGER' &&
+        typeof renderManagerDashboard_ === 'function') renderManagerDashboard_(dashboardData);
+  }
+  function hanlinTeacherPhoneLoad_() {
+    const role = String(currentUser && currentUser.role || '').toUpperCase();
+    if (role !== 'ADMIN' && role !== 'MANAGER') return;
+    if (hanlinTeacherPhoneState_.loaded || hanlinTeacherPhoneState_.pending) return;
+    const token = localStorage.getItem(HANLIN_TOKEN_KEY);
+    if (!token) return;
+    hanlinTeacherPhoneState_.pending = true;
+    google.script.run.withSuccessHandler(function(response) {
+      hanlinTeacherPhoneState_.pending = false;
+      if (!response || response.success !== true) return;
+      hanlinTeacherPhoneState_.byId = response.byId || {};
+      hanlinTeacherPhoneState_.byName = response.byName || {};
+      hanlinTeacherPhoneState_.loaded = true;
+      hanlinTeacherPhoneRerender_();
+    }).withFailureHandler(function(err) {
+      hanlinTeacherPhoneState_.pending = false;
+      console.warn('Teacher contact retrieval failed', err);
+    }).hanlinTeacherContactsList(token);
+  }
+
+
+  // Optional student directory. Failure must never interrupt dashboard rendering.
+  const hanlinStudentDirectory_ = {loaded:false,loading:false,byId:{},byNickname:{}};
+  function hanlinStudentNorm_(value) {
+    return String(value == null ? '' : value).trim().toLowerCase().replace(/\s+/g,'');
+  }
+  function hanlinStudentCell_(item) {
+    const name = escapeHtml(item.student || '—');
+    const role = String(currentUser && currentUser.role || '').toUpperCase();
+    if (role !== 'ADMIN' && role !== 'MANAGER') return name;
+    const id = hanlinStudentNorm_(item.studentId || item.StudentID);
+    const data = (id && hanlinStudentDirectory_.byId[id]) || hanlinStudentDirectory_.byNickname[hanlinStudentNorm_(item.student)];
+    if (!data) return name;
+    const phone = String(data.phone || '').trim();
+    const digits = phone.replace(/[^+0-9]/g,'');
+    const phoneHtml = /^\+?[0-9]{8,15}$/.test(digits)
+      ? `<div class="hanlin-guardian-phone"><a href="tel:${escapeHtml(digits)}" title="โทรผู้ปกครอง">☎ ${escapeHtml(phone)}</a>${data.guardian ? ' · '+escapeHtml(data.guardian) : ''}</div>` : '';
+    const photo = String(data.photo || '');
+    // Drive thumbnails require image access permission; if private, hide broken image.
+    const imageHtml = /^https:\/\/(drive\.google\.com|docs\.google\.com)\//.test(photo)
+      ? `<img src="${escapeHtml(photo)}" class="hanlin-student-avatar" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : '';
+    return `<div class="hanlin-student-info">${imageHtml}<div>${name}${phoneHtml}</div></div>`;
+  }
+  function hanlinStudentDirectoryLoad_() {
+    try {
+      const role = String(currentUser && currentUser.role || '').toUpperCase();
+      if (role !== 'ADMIN' && role !== 'MANAGER') return;
+      if (hanlinStudentDirectory_.loaded || hanlinStudentDirectory_.loading) return;
+      const token = localStorage.getItem(HANLIN_TOKEN_KEY);
+      if (!token || !window.google || !google.script || !google.script.run) return;
+      hanlinStudentDirectory_.loading = true;
+      google.script.run.withSuccessHandler(function(res) {
+        hanlinStudentDirectory_.loading = false;
+        if (!res || res.success !== true) return;
+        hanlinStudentDirectory_.byId = res.byId || {};
+        hanlinStudentDirectory_.byNickname = res.byNickname || {};
+        hanlinStudentDirectory_.loaded = true;
+        try { if (dashboardData) renderSchedule(dashboardData.schedule || []); } catch (err) { console.warn(err); }
+      }).withFailureHandler(function(err) {
+        hanlinStudentDirectory_.loading = false;
+        console.warn('Optional student directory unavailable',err);
+      }).hanlinStudentDirectoryGet(token);
+    } catch (err) {
+      hanlinStudentDirectory_.loading = false;
+      console.warn('Optional student directory error',err);
+    }
+  }
+
   function renderSchedule(items) {
   const body = document.getElementById('todayScheduleBody');
 
@@ -11658,7 +11771,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
   if (!visibleItems.length) {
     body.innerHTML = `
       <tr>
-        <td colspan="5">
+        <td colspan="6">
           <div class="empty-state">ไม่มีตารางเรียนวันนี้</div>
         </td>
       </tr>
@@ -11669,10 +11782,11 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
   body.innerHTML = visibleItems.map((item) => `
     <tr>
       <td>${escapeHtml(item.time || '—')}</td>
-      <td>${escapeHtml(item.teacher || '—')}</td>
-      <td>${escapeHtml(item.student || '—')}</td>
+      <td>${hanlinTeacherPhoneCell_(item)}</td>
+      <td>${hanlinStudentCell_(item)}</td>
       <td>${escapeHtml(displayRoom(item))}</td>
       <td>${statusPill(item)}</td>
+      <td>${hanlinNotesView_(item, true)}</td>
     </tr>
   `).join('');
 }
@@ -16359,277 +16473,109 @@ function openRoomDetailModal(roomId) {
 
 
 function renderRoomMaintenanceControls_(item) {
-  const panel =
-    document.getElementById(
-      'roomMaintenancePanel'
-    );
+  const panel = document.getElementById('roomMaintenancePanel');
+  if (!panel) return;
+  const role = String(currentUser && currentUser.role || '').toUpperCase();
+  const canManage = role === 'ADMIN' || role === 'MANAGER';
+  panel.classList.toggle('is-hidden', !canManage);
+  if (!canManage) return;
 
-  if (!panel) {
-    return;
-  }
-
-  const role =
-    String(
-      currentUser &&
-      currentUser.role
-        ? currentUser.role
-        : ''
-    ).toUpperCase();
-
-  const canManage =
-    role === 'ADMIN' ||
-    role === 'MANAGER';
-
-  panel.classList.toggle(
-    'is-hidden',
-    !canManage
-  );
-
-  if (!canManage) {
-    return;
-  }
-
-  const reason =
-    document.getElementById(
-      'roomMaintenanceReason'
-    );
-
-  const button =
-    document.getElementById(
-      'roomMaintenanceToggleButton'
-    );
-
-  const retryButton =
-    document.getElementById(
-      'roomMaintenanceRetryButton'
-    );
-
-  if (reason) {
-    reason.value =
-      item &&
-      item.maintenanceClosed
-        ? (
-            item.maintenanceReason ||
-            ''
-          )
-        : '';
-  }
-
-  if (button) {
-    const closed =
-      Boolean(
-        item &&
-        item.maintenanceClosed
-      );
-
-    button.disabled = false;
-
-    button.className =
-      'room-maintenance-toggle ' +
-      (
-        closed
-          ? 'open-room'
-          : 'close-room'
-      );
-
-    button.innerHTML =
-      closed
-        ? (
-            '<span class="material-symbols-rounded">door_open</span> ' +
-            'เปิดใช้งานห้องนี้'
-          )
-        : (
-            '<span class="material-symbols-rounded">construction</span> ' +
-            'ปิดห้องและย้ายคาบอัตโนมัติ'
-          );
-  }
-
-  if (retryButton) {
-    const closed =
-      Boolean(
-        item &&
-        item.maintenanceClosed
-      );
-
-    retryButton.disabled = false;
-    retryButton.classList.toggle(
-      'is-hidden',
-      !closed
-    );
-  }
+  const defaultDate = selectedDashboardDate || hanlinRoomMaintenanceLocalDate_();
+  document.getElementById('roomMaintenanceStartDate').value = defaultDate;
+  document.getElementById('roomMaintenanceEndDate').value = defaultDate;
+  document.getElementById('roomMaintenanceAction').value = item && item.maintenanceClosed ? 'open' : 'close';
+  document.getElementById('roomMaintenanceReason').value = item && item.maintenanceClosed ? (item.maintenanceReason || '') : '';
+  const retry = document.getElementById('roomMaintenanceRetryButton');
+  const toggle = document.getElementById('roomMaintenanceToggleButton');
+  if (toggle) toggle.disabled = false;
+  if (retry) retry.classList.toggle('is-hidden', !(item && item.maintenanceClosed));
+  const status = document.getElementById('roomMaintenanceResult');
+  if (status) status.classList.add('is-hidden');
+  updateRoomMaintenanceAction_();
 }
 
+function hanlinRoomMaintenanceLocalDate_() {
+  const d = new Date();
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+}
+
+function updateRoomMaintenanceAction_() {
+  const action = document.getElementById('roomMaintenanceAction');
+  const button = document.getElementById('roomMaintenanceToggleButton');
+  if (!action || !button) return;
+  const closed = action.value === 'close';
+  button.className = 'room-maintenance-toggle ' + (closed ? 'close-room' : 'open-room');
+  button.innerHTML = closed
+    ? '<span class="material-symbols-rounded">construction</span> ปิดห้องและย้ายคาบอัตโนมัติ'
+    : '<span class="material-symbols-rounded">door_open</span> เปิดใช้งานห้องตามวันที่เลือก';
+}
+
+function hanlinRoomMaintenanceStatus_(message, isError) {
+  const el = document.getElementById('roomMaintenanceResult');
+  if (!el) return;
+  el.classList.remove('is-hidden');
+  el.style.border = '1px solid ' + (isError ? '#fecaca' : '#cbd5e1');
+  el.style.background = isError ? '#fef2f2' : '#f8fafc';
+  el.style.color = isError ? '#991b1b' : '#334155';
+  el.textContent = message;
+}
 
 function toggleRoomMaintenance_() {
-  const item =
-    currentRoomMaintenanceItem_;
-
-  if (!item) {
-    showToast('ไม่พบข้อมูลห้อง');
-    return;
-  }
-
-  const token =
-    localStorage.getItem(
-      HANLIN_TOKEN_KEY
-    );
-
-  const date =
-    selectedDashboardDate ||
-    (
-      new Date()
-        .toISOString()
-        .slice(0, 10)
-    );
-
-  const isClosed =
-    Boolean(
-      item.maintenanceClosed
-    );
-
-  const nextClosed =
-    !isClosed;
-
-  const reasonInput =
-    document.getElementById(
-      'roomMaintenanceReason'
-    );
-
-  const reason =
-    reasonInput
-      ? reasonInput.value.trim()
-      : '';
-
-  if (
-    nextClosed &&
-    !reason
-  ) {
-    showToast(
-      'กรุณาระบุเหตุผล เช่น ซ่อมแซม'
-    );
-
-    if (reasonInput) {
-      reasonInput.focus();
-    }
-
-    return;
-  }
-
-  const message =
-    nextClosed
-      ? (
-          `ยืนยันปิดห้อง ${item.roomId} วันที่ ${date} ?\n` +
-          'ระบบจะย้ายคาบที่อยู่ในห้องนี้ไปยังห้องว่างอื่นอัตโนมัติ'
-        )
-      : (
-          `ยืนยันเปิดห้อง ${item.roomId} วันที่ ${date} ?\n` +
-          'คาบที่เคยถูกย้ายไปแล้วจะไม่ย้ายกลับอัตโนมัติ'
-        );
-
-  if (!window.confirm(message)) {
-    return;
-  }
-
-  const button =
-    document.getElementById(
-      'roomMaintenanceToggleButton'
-    );
-
-  const retryButton =
-    document.getElementById(
-      'roomMaintenanceRetryButton'
-    );
-
-  if (button) {
-    button.disabled = true;
-  }
-
-  if (retryButton) {
-    retryButton.disabled = true;
-  }
-
+  const item = currentRoomMaintenanceItem_;
+  if (!item || !item.roomId) return showToast('ไม่พบข้อมูลห้อง');
+  const startDate = document.getElementById('roomMaintenanceStartDate').value;
+  const endDate = document.getElementById('roomMaintenanceEndDate').value;
+  const action = document.getElementById('roomMaintenanceAction').value;
+  if (action !== 'close' && action !== 'open') return showToast('กรุณาเลือกการดำเนินการ');
+  const closed = action === 'close';
+  const reasonInput = document.getElementById('roomMaintenanceReason');
+  const reason = reasonInput.value.trim();
+  if (!startDate || !endDate) return showToast('กรุณาเลือกวันเริ่มต้นและวันสิ้นสุด');
+  if (endDate < startDate) return showToast('วันสิ้นสุดต้องไม่อยู่ก่อนวันเริ่มต้น');
+  const startUTC = new Date(startDate + 'T00:00:00Z');
+  const endUTC = new Date(endDate + 'T00:00:00Z');
+  if (Number.isNaN(startUTC.getTime()) || Number.isNaN(endUTC.getTime())) return showToast('รูปแบบวันที่ไม่ถูกต้อง');
+  const days = Math.round((endUTC.getTime() - startUTC.getTime()) / 86400000) + 1;
+  if (days < 1 || days > 31) return showToast('กำหนดได้สูงสุด 31 วันต่อครั้ง');
+  if (closed && !reason) { reasonInput.focus(); return showToast('กรุณาระบุเหตุผลที่ปิดห้อง'); }
+  const confirmation = `${closed ? 'ปิด' : 'เปิด'}ห้อง ${item.roomId} ตั้งแต่ ${startDate} ถึง ${endDate} (${days} วัน)\n` +
+    (closed ? 'ตรวจสอบและย้ายคาบของแต่ละวันไปห้องว่างอัตโนมัติ' : 'คาบที่เคยย้ายจะไม่ย้ายกลับอัตโนมัติ');
+  if (!window.confirm(confirmation)) return;
+  const button = document.getElementById('roomMaintenanceToggleButton');
+  const retry = document.getElementById('roomMaintenanceRetryButton');
+  button.disabled = true;
+  if (retry) retry.disabled = true;
+  const oldLabel = button.innerHTML;
+  button.textContent = `กำลัง${closed ? 'ปิด' : 'เปิด'}ห้อง ${days} วัน…`;
+  hanlinRoomMaintenanceStatus_('กำลังบันทึกช่วงวันที่และตรวจสอบตารางเรียน…', false);
+  const token = localStorage.getItem(HANLIN_TOKEN_KEY);
+  const done = () => { button.disabled = false; button.innerHTML = oldLabel; if (retry) retry.disabled = false; };
   google.script.run
-    .withSuccessHandler((response) => {
-      if (button) {
-        button.disabled = false;
-      }
-
-      if (retryButton) {
-        retryButton.disabled = false;
-      }
-
-      if (
-        !response ||
-        response.success === false
-      ) {
-        showToast(
-          response &&
-          response.message
-            ? response.message
-            : 'ทำรายการไม่สำเร็จ'
-        );
-
+    .withSuccessHandler(response => {
+      done();
+      const result = response && (response.data || response);
+      if (!result || result.success === false || response.success === false) {
+        hanlinRoomMaintenanceStatus_((result && result.message) || 'ดำเนินการไม่สำเร็จ', true);
         return;
       }
-
-      const result =
-        response.data ||
-        response;
-
-      let toastText =
-        result.message ||
-        'บันทึกเรียบร้อยแล้ว';
-
-      if (
-        result.unresolvedCount > 0
-      ) {
-        toastText +=
-          ` — มี ${result.unresolvedCount} คาบที่ยังไม่มีห้องว่าง`;
-      }
-
-      showToast(toastText);
-
-      closeRoomDetailModal();
-
-      /*
-       * โหลด Dashboard ใหม่
-       * เพื่อเห็นห้องปิด/เปิด และห้องใหม่ของคาบที่ถูกย้าย
-       */
+      const failed = Array.isArray(result.failures) ? result.failures : [];
+      const finished = Number(result.completedDays != null ? result.completedDays : result.dayCount || 1);
+      const moved = Number(result.movedCount || 0);
+      const unresolved = Number(result.unresolvedCount || 0);
+      let message = `${closed ? 'ปิด' : 'เปิด'}ห้อง ${item.roomId}: สำเร็จ ${finished}/${days} วัน`;
+      if (closed) message += `\nย้ายคาบสำเร็จ ${moved} | ยังย้ายไม่ได้ ${unresolved}`;
+      if (failed.length) message += '\nวันที่เกิดข้อผิดพลาด: ' + failed.map(f => `${f.date}: ${f.message}`).join('; ');
+      if (unresolved) message += '\nกรุณาตรวจสอบคาบที่ย้ายไม่ได้ในตารางเรียน';
+      hanlinRoomMaintenanceStatus_(message, failed.length > 0 || unresolved > 0);
       loadSecureDashboard(false);
-
     })
-    .withFailureHandler((error) => {
-      if (button) {
-        button.disabled = false;
-      }
-
-      if (retryButton) {
-        retryButton.disabled = false;
-      }
-
-      showToast(
-        error &&
-        error.message
-          ? error.message
-          : 'ทำรายการไม่สำเร็จ'
-      );
+    .withFailureHandler(error => {
+      done();
+      hanlinRoomMaintenanceStatus_('ดำเนินการไม่สำเร็จ: ' + (error && error.message || String(error)), true);
     })
-    .hanlinApi(
-      'room.maintenance.set',
-      {
-        token,
-        payload: {
-          date,
-          roomId:
-            item.roomId,
-          closed:
-            nextClosed,
-          reason,
-          autoMove:
-            true
-        }
-      }
-    );
+    .hanlinApi('room.maintenance.set', {
+      token, payload: {startDate, endDate, roomId: item.roomId, closed, reason, autoMove: true}
+    });
 }
 
 
@@ -23346,7 +23292,23 @@ function escapeJsString_(value) {
           <tbody>${teacherRows}</tbody>
         </table>
         <script>window.onload=function(){window.print()};<\/script>
-      </body>
+      <style>
+.hanlin-schedule-note{padding:7px 10px;border-left:3px solid #e3a027;background:#fff8e8;border-radius:5px;font-size:12px;white-space:normal;line-height:1.5;color:#6f4a09;min-width:220px}
+#todayScheduleSection td:last-child, .manager-schedule-panel td:last-child, .teacher-schedule-table td:last-child{white-space:normal;min-width:240px}
+.hanlin-note-edit{display:inline-block;margin-left:9px;padding:4px 9px;border:1px solid #ccdbeb;border-radius:7px;background:#fff;color:#17608b;font-size:12px;cursor:pointer}
+.hanlin-note-overlay{position:fixed;inset:0;z-index:10050;background:#09182d8a;display:flex;align-items:center;justify-content:center;padding:16px}
+.hanlin-note-panel{background:white;border-radius:15px;padding:23px;max-width:510px;width:100%;box-shadow:0 16px 40px #0003}
+.hanlin-note-panel textarea{display:block;width:100%;min-height:115px;margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font:inherit}
+.hanlin-note-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+.hanlin-note-actions button{padding:9px 17px;border:1px solid #d5dce6;border-radius:9px;cursor:pointer}
+#hanlinNotesSave{background:#9b1c3b;color:white}
+</style>
+<div id="hanlinNotesModal" class="hanlin-note-overlay is-hidden" role="dialog" aria-modal="true" aria-label="หมายเหตุคาบเรียน" onclick="if(event.target===this)hanlinNotesClose_()">
+<div class="hanlin-note-panel"><h3>เพิ่ม / แก้ไขหมายเหตุคาบเรียน</h3><div id="hanlinNotesClass"></div>
+<textarea id="hanlinNotesText" maxlength="1000" placeholder="เช่น นักเรียนขอเปลี่ยนห้องเพราะมีเหตุจำเป็น"></textarea>
+<small>หมายเหตุจะปรากฏให้ครูผู้สอนเห็นในตารางเรียน ไม่ควรใส่ข้อมูลสุขภาพหรือข้อมูลอ่อนไหวเกินจำเป็น</small>
+<div id="hanlinNotesError" style="color:#ad1c35" aria-live="polite"></div><div class="hanlin-note-actions"><button type="button" onclick="hanlinNotesClose_()">ยกเลิก</button><button type="button" id="hanlinNotesSave" onclick="hanlinNotesSave_()">บันทึก</button></div></div></div>
+</body>
       </html>
     `);
 
@@ -23482,7 +23444,22 @@ function escapeJsString_(value) {
           <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:#8a97a6">ไม่พบรายการที่ตรงกับสถานะที่เลือก</td></tr>'}</tbody>
         </table>
         <script>window.onload=function(){window.print()};<\/script>
-      </body>
+      <style>
+.hanlin-schedule-note{margin-top:7px;padding:7px 10px;border-left:3px solid #e3a027;background:#fff8e8;border-radius:5px;font-size:12px;white-space:normal;line-height:1.5;color:#6f4a09}
+.hanlin-note-edit{display:inline-block;margin-left:9px;padding:4px 9px;border:1px solid #ccdbeb;border-radius:7px;background:#fff;color:#17608b;font-size:12px;cursor:pointer}
+.hanlin-note-overlay{position:fixed;inset:0;z-index:10050;background:#09182d8a;display:flex;align-items:center;justify-content:center;padding:16px}
+.hanlin-note-panel{background:white;border-radius:15px;padding:23px;max-width:510px;width:100%;box-shadow:0 16px 40px #0003}
+.hanlin-note-panel textarea{display:block;width:100%;min-height:115px;margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font:inherit}
+.hanlin-note-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+.hanlin-note-actions button{padding:9px 17px;border:1px solid #d5dce6;border-radius:9px;cursor:pointer}
+#hanlinNotesSave{background:#9b1c3b;color:white}
+</style>
+<div id="hanlinNotesModal" class="hanlin-note-overlay is-hidden" role="dialog" aria-modal="true" aria-label="หมายเหตุคาบเรียน" onclick="if(event.target===this)hanlinNotesClose_()">
+<div class="hanlin-note-panel"><h3>เพิ่ม / แก้ไขหมายเหตุคาบเรียน</h3><div id="hanlinNotesClass"></div>
+<textarea id="hanlinNotesText" maxlength="1000" placeholder="เช่น นักเรียนขอเปลี่ยนห้องเพราะมีเหตุจำเป็น"></textarea>
+<small>หมายเหตุจะปรากฏให้ครูผู้สอนเห็นในตารางเรียน ไม่ควรใส่ข้อมูลสุขภาพหรือข้อมูลอ่อนไหวเกินจำเป็น</small>
+<div id="hanlinNotesError" style="color:#ad1c35" aria-live="polite"></div><div class="hanlin-note-actions"><button type="button" onclick="hanlinNotesClose_()">ยกเลิก</button><button type="button" id="hanlinNotesSave" onclick="hanlinNotesSave_()">บันทึก</button></div></div></div>
+</body>
       </html>
     `);
 
@@ -24900,6 +24877,80 @@ function escapeJsString_(value) {
       );
   }
 
+
+  // HANLIN SCHEDULE NOTES — per-date, per-class, stable across room moves.
+  const hanlinNotesState_ = { date:'', rows:{}, loaded:false, pending:false, error:'' };
+  function hanlinNotesDate_() { return String(selectedDashboardDate || (dashboardData && dashboardData.selectedDate) || '').trim(); }
+  function hanlinNotesKey_(item) {
+    const v = x => String(x || '').trim().toLowerCase().replace(/\s+/g,'');
+    return [hanlinNotesDate_(),v(item.time),v(item.teacherId || item.teacher),v(item.studentId || item.student)].join('|');
+  }
+  function hanlinNotesView_(item, editable) {
+    const id = hanlinNotesKey_(item);
+    const note = Object.prototype.hasOwnProperty.call(hanlinNotesState_.rows,id)
+      ? hanlinNotesState_.rows[id] : String(item.note || '');
+    const idx = (dashboardData && dashboardData.schedule || []).findIndex(x => hanlinNotesKey_(x) === id);
+    const button = editable && idx >= 0
+      ? `<button type="button" class="hanlin-note-edit" data-note-index="${idx}" onclick="hanlinNotesEdit_(${idx})">${note ? 'แก้ไขหมายเหตุ' : '+ เพิ่มหมายเหตุ'}</button>` : '';
+    return `<div class="hanlin-schedule-note"><span>${escapeHtml(note || '-')}</span> ${button}</div>`;
+  }
+  function hanlinNotesRerender_() {
+    if (!dashboardData) return;
+    if (typeof renderSchedule === 'function') renderSchedule(dashboardData.schedule || []);
+    if (typeof renderManagerDashboard_ === 'function' && String(currentUser && currentUser.role || '').toUpperCase() === 'MANAGER') renderManagerDashboard_(dashboardData);
+    if (typeof renderTeacherRoleDashboard_ === 'function' && String(currentUser && currentUser.role || '').toUpperCase() === 'TEACHER') renderTeacherRoleDashboard_(dashboardData);
+  }
+  function hanlinNotesLoad_() {
+    const date = hanlinNotesDate_();
+    const token = localStorage.getItem(HANLIN_TOKEN_KEY);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !token) return;
+    if (hanlinNotesState_.date === date && (hanlinNotesState_.loaded || hanlinNotesState_.pending)) return;
+    hanlinNotesState_.date=date; hanlinNotesState_.rows={}; hanlinNotesState_.loaded=false; hanlinNotesState_.pending=true;
+    google.script.run.withSuccessHandler(r=>{
+      if (hanlinNotesState_.date !== date) return;
+      hanlinNotesState_.pending=false; hanlinNotesState_.loaded=true;
+      if (r && r.success) hanlinNotesState_.rows=r.notes || {};
+      else hanlinNotesState_.error=r && r.message || 'โหลดหมายเหตุไม่สำเร็จ';
+      hanlinNotesRerender_();
+    }).withFailureHandler(e=>{
+      if (hanlinNotesState_.date !== date) return;
+      hanlinNotesState_.pending=false; hanlinNotesState_.loaded=true;
+      hanlinNotesState_.error=e && e.message || 'โหลดหมายเหตุไม่สำเร็จ';
+    }).hanlinScheduleNotesList(token,date);
+  }
+  function hanlinNotesEdit_(idx) {
+    const role=String(currentUser && currentUser.role || '').toUpperCase();
+    if (role !== 'ADMIN' && role !== 'MANAGER') return;
+    const item=(dashboardData && dashboardData.schedule || [])[idx];
+    if (!item) return;
+    const key=hanlinNotesKey_(item);
+    const modal=document.getElementById('hanlinNotesModal');
+    modal.dataset.index=String(idx);
+    document.getElementById('hanlinNotesClass').textContent=[item.time,item.teacher,item.student,displayRoom(item)].filter(Boolean).join(' · ');
+    document.getElementById('hanlinNotesText').value=Object.prototype.hasOwnProperty.call(hanlinNotesState_.rows,key) ? hanlinNotesState_.rows[key] : (item.note || '');
+    document.getElementById('hanlinNotesError').textContent='';
+    modal.classList.remove('is-hidden');
+    document.getElementById('hanlinNotesText').focus();
+  }
+  function hanlinNotesClose_(){document.getElementById('hanlinNotesModal').classList.add('is-hidden');}
+  function hanlinNotesSave_(){
+    const modal=document.getElementById('hanlinNotesModal');
+    const idx=Number(modal.dataset.index);
+    const item=(dashboardData && dashboardData.schedule || [])[idx];
+    if (!item) return;
+    const note=document.getElementById('hanlinNotesText').value.trim();
+    const save=document.getElementById('hanlinNotesSave');
+    const error=document.getElementById('hanlinNotesError');
+    save.disabled=true; error.textContent='กำลังบันทึก...';
+    google.script.run.withSuccessHandler(r=>{
+      save.disabled=false;
+      if (!r || !r.success){error.textContent=r && r.message || 'บันทึกไม่สำเร็จ';return;}
+      hanlinNotesState_.rows[hanlinNotesKey_(item)]=note;
+      hanlinNotesClose_(); hanlinNotesRerender_();
+    }).withFailureHandler(e=>{save.disabled=false;error.textContent=e && e.message || 'บันทึกไม่สำเร็จ';})
+    .hanlinScheduleNotesSave(localStorage.getItem(HANLIN_TOKEN_KEY),{date:hanlinNotesDate_(), time:item.time, teacherId:item.teacherId, teacher:item.teacher, studentId:item.studentId, student:item.student, note:note});
+  }
+
 </script>
 
   <div id="allRoomsModal" class="modal-overlay is-hidden" onclick="closeModalFromOverlay(event,'allRoomsModal')">
@@ -25018,12 +25069,20 @@ function escapeJsString_(value) {
           autocomplete="off"
         >
 
-        <small>
-          การปิดห้องมีผลเฉพาะวันที่กำลังดูอยู่
-          และระบบจะพยายามย้ายทุกคาบในห้องนี้
-          ไปยังห้องอื่นที่ว่างในช่วงเวลาเดิมโดยอัตโนมัติ
-        </small>
+        <label for="roomMaintenanceAction">การดำเนินการ</label>
+        <select id="roomMaintenanceAction" style="display:block;width:100%;min-height:44px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;background:white;color:#1f2937;font:inherit;" onchange="updateRoomMaintenanceAction_()">
+          <option value="close">ปิดห้อง</option>
+          <option value="open">เปิดห้อง</option>
+        </select>
+        <div class="room-maintenance-dates" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0;">
+          <div><label for="roomMaintenanceStartDate">วันเริ่มต้น</label>
+            <input type="date" id="roomMaintenanceStartDate" style="width:100%;min-width:0;"></div>
+          <div><label for="roomMaintenanceEndDate">วันสิ้นสุด</label>
+            <input type="date" id="roomMaintenanceEndDate" style="width:100%;min-width:0;"></div>
+        </div>
+        <small>เลือกวันเดียวกันทั้งสองช่องสำหรับการปิดห้อง 1 วัน หรือกำหนดช่วงเวลาติดต่อกันสูงสุด 31 วัน ระบบจะพยายามย้ายคาบในแต่ละวันที่ปิดโดยอัตโนมัติ</small>
 
+        <div id="roomMaintenanceResult" class="is-hidden" role="status" aria-live="polite" style="white-space:pre-line;padding:12px;margin:12px 0;border-radius:10px;font-size:13px;"></div>
         <div class="room-maintenance-actions">
           <button
             id="roomMaintenanceRetryButton"
@@ -27188,5 +27247,20 @@ function escapeJsString_(value) {
 
 <div id="hanlinAutocompleteBox" class="hanlin-autocomplete-box is-hidden"></div>
 
+<style>
+.hanlin-schedule-note{margin-top:7px;padding:7px 10px;border-left:3px solid #e3a027;background:#fff8e8;border-radius:5px;font-size:12px;white-space:normal;line-height:1.5;color:#6f4a09}
+.hanlin-note-edit{display:inline-block;margin-left:9px;padding:4px 9px;border:1px solid #ccdbeb;border-radius:7px;background:#fff;color:#17608b;font-size:12px;cursor:pointer}
+.hanlin-note-overlay{position:fixed;inset:0;z-index:10050;background:#09182d8a;display:flex;align-items:center;justify-content:center;padding:16px}
+.hanlin-note-panel{background:white;border-radius:15px;padding:23px;max-width:510px;width:100%;box-shadow:0 16px 40px #0003}
+.hanlin-note-panel textarea{display:block;width:100%;min-height:115px;margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font:inherit}
+.hanlin-note-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+.hanlin-note-actions button{padding:9px 17px;border:1px solid #d5dce6;border-radius:9px;cursor:pointer}
+#hanlinNotesSave{background:#9b1c3b;color:white}
+</style>
+<div id="hanlinNotesModal" class="hanlin-note-overlay is-hidden" role="dialog" aria-modal="true" aria-label="หมายเหตุคาบเรียน" onclick="if(event.target===this)hanlinNotesClose_()">
+<div class="hanlin-note-panel"><h3>เพิ่ม / แก้ไขหมายเหตุคาบเรียน</h3><div id="hanlinNotesClass"></div>
+<textarea id="hanlinNotesText" maxlength="1000" placeholder="เช่น นักเรียนขอเปลี่ยนห้องเพราะมีเหตุจำเป็น"></textarea>
+<small>หมายเหตุจะปรากฏให้ครูผู้สอนเห็นในตารางเรียน ไม่ควรใส่ข้อมูลสุขภาพหรือข้อมูลอ่อนไหวเกินจำเป็น</small>
+<div id="hanlinNotesError" style="color:#ad1c35" aria-live="polite"></div><div class="hanlin-note-actions"><button type="button" onclick="hanlinNotesClose_()">ยกเลิก</button><button type="button" id="hanlinNotesSave" onclick="hanlinNotesSave_()">บันทึก</button></div></div></div>
 </body>
 </html>
