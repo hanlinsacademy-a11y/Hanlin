@@ -8583,6 +8583,18 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
 .hanlin-guardian-phone a{color:#126ab1;font-weight:600;text-decoration:none}
 .hanlin-guardian-phone a:hover{text-decoration:underline}
 </style>
+<style>
+/* Photo enlargement: front-end only; no extra API calls */
+.hanlin-student-photo-button{appearance:none;background:transparent;border:0;padding:0;margin:0;line-height:0;cursor:zoom-in;border-radius:8px;flex-shrink:0}
+.hanlin-student-photo-button:focus-visible{outline:3px solid #2563eb;outline-offset:3px}
+.hanlin-student-photo-button .hanlin-student-avatar{display:block}
+.hanlin-photo-overlay{position:fixed;inset:0;background:rgba(11,18,32,.86);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:52px 16px 20px}
+.hanlin-photo-overlay[hidden]{display:none!important}
+.hanlin-photo-dialog{position:relative;max-width:min(96vw,980px);width:max-content;max-height:calc(100vh - 90px);display:flex;flex-direction:column;align-items:center;gap:9px}
+.hanlin-photo-large{display:block;max-width:94vw;max-height:calc(100vh - 140px);width:auto;height:auto;object-fit:contain;border-radius:12px;background:#fff}
+.hanlin-photo-close{position:absolute;right:0;top:-45px;border:1px solid rgba(255,255,255,.65);background:#fff;color:#111827;border-radius:99px;width:38px;height:38px;font-size:25px;cursor:pointer}
+.hanlin-photo-caption{color:#fff;font-weight:600;text-align:center;max-width:94vw;overflow-wrap:anywhere}
+</style>
 </head>
 
 <body>
@@ -11667,6 +11679,37 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
   function hanlinStudentNorm_(value) {
     return String(value == null ? '' : value).trim().toLowerCase().replace(/\s+/g,'');
   }
+
+  // Photo viewer reads the existing thumbnail; never fetches student data separately.
+  let hanlinPhotoPreviouslyFocused_ = null;
+  function hanlinStudentPhotoOpen_(button) {
+    const thumbnail = button && button.querySelector('img');
+    const overlay = document.getElementById('hanlinStudentPhotoOverlay');
+    const large = document.getElementById('hanlinStudentPhotoLarge');
+    const caption = document.getElementById('hanlinStudentPhotoCaption');
+    if (!thumbnail || !overlay || !large || !caption || !thumbnail.src) return;
+    hanlinPhotoPreviouslyFocused_ = document.activeElement;
+    large.src = thumbnail.currentSrc || thumbnail.src;
+    caption.textContent = button.getAttribute('data-student-name') || 'รูปนักเรียน';
+    large.alt = caption.textContent;
+    overlay.hidden = false;
+    const closeButton = overlay.querySelector('.hanlin-photo-close');
+    if (closeButton) closeButton.focus();
+  }
+  function hanlinStudentPhotoClose_() {
+    const overlay = document.getElementById('hanlinStudentPhotoOverlay');
+    const large = document.getElementById('hanlinStudentPhotoLarge');
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (large) large.removeAttribute('src');
+    if (hanlinPhotoPreviouslyFocused_ && document.contains(hanlinPhotoPreviouslyFocused_)) {
+      hanlinPhotoPreviouslyFocused_.focus();
+    }
+  }
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') hanlinStudentPhotoClose_();
+  });
+
   function hanlinStudentCell_(item) {
     const name = escapeHtml(item.student || '—');
     const role = String(currentUser && currentUser.role || '').toUpperCase();
@@ -11681,7 +11724,7 @@ const HANLIN_API_URL = 'https://script.google.com/macros/s/AKfycbxaUxth71AUbyaXq
     const photo = String(data.photo || '');
     // Drive thumbnails require image access permission; if private, hide broken image.
     const imageHtml = /^https:\/\/(drive\.google\.com|docs\.google\.com)\//.test(photo)
-      ? `<img src="${escapeHtml(photo)}" class="hanlin-student-avatar" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : '';
+      ? `<button type="button" class="hanlin-student-photo-button" data-student-name="${escapeHtml(item.student || 'นักเรียน')}" title="คลิกเพื่อขยายรูปนักเรียน" aria-label="ดูรูป ${escapeHtml(item.student || 'นักเรียน')} ขนาดใหญ่" onclick="hanlinStudentPhotoOpen_(this)"><img src="${escapeHtml(photo)}" class="hanlin-student-avatar" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'"></button>` : '';
     return `<div class="hanlin-student-info">${imageHtml}<div>${name}${phoneHtml}</div></div>`;
   }
   function hanlinStudentDirectoryLoad_() {
@@ -27262,5 +27305,13 @@ function escapeJsString_(value) {
 <textarea id="hanlinNotesText" maxlength="1000" placeholder="เช่น นักเรียนขอเปลี่ยนห้องเพราะมีเหตุจำเป็น"></textarea>
 <small>หมายเหตุจะปรากฏให้ครูผู้สอนเห็นในตารางเรียน ไม่ควรใส่ข้อมูลสุขภาพหรือข้อมูลอ่อนไหวเกินจำเป็น</small>
 <div id="hanlinNotesError" style="color:#ad1c35" aria-live="polite"></div><div class="hanlin-note-actions"><button type="button" onclick="hanlinNotesClose_()">ยกเลิก</button><button type="button" id="hanlinNotesSave" onclick="hanlinNotesSave_()">บันทึก</button></div></div></div>
+
+<div id="hanlinStudentPhotoOverlay" class="hanlin-photo-overlay" hidden role="presentation" onclick="if(event.target===this) hanlinStudentPhotoClose_()">
+  <div class="hanlin-photo-dialog" role="dialog" aria-modal="true" aria-label="รูปนักเรียนขนาดใหญ่">
+    <button type="button" class="hanlin-photo-close" onclick="hanlinStudentPhotoClose_()" aria-label="ปิดรูปภาพ">×</button>
+    <img id="hanlinStudentPhotoLarge" class="hanlin-photo-large" alt="รูปนักเรียนขนาดใหญ่">
+    <div class="hanlin-photo-caption" id="hanlinStudentPhotoCaption"></div>
+  </div>
+</div>
 </body>
 </html>
