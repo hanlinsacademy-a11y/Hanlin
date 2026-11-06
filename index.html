@@ -988,6 +988,25 @@ body.modal-open {
   overflow: hidden;
 }
 
+/* Hanlin GitHub: restore scrolling of the MAIN page only.
+   Modal contents and their own scroll rules are left unchanged. */
+html {
+  overflow-y: auto;
+}
+body:not(.modal-open) {
+  overflow-y: auto;
+}
+/* A stale modal-open class should not freeze the main page if all
+   modal overlays are actually closed. Real open modals remain locked. */
+body.modal-open:not(:has(
+  .modal-overlay:not(.is-hidden),
+  .hanlin-note-overlay:not(.is-hidden),
+  .hanlin-photo-overlay:not([hidden])
+)) {
+  overflow-y: auto;
+}
+
+
 @media (max-width: 760px) {
   .modal-overlay {
     padding: 10px;
@@ -27313,65 +27332,5 @@ function escapeJsString_(value) {
     <div class="hanlin-photo-caption" id="hanlinStudentPhotoCaption"></div>
   </div>
 </div>
-<!-- Hanlin GitHub scroll recovery: scoped to stale body.modal-open state. -->
-<script id="hanlin-github-scroll-recovery">
-(function () {
-  'use strict';
-  function overlayIsActuallyVisible_(element) {
-    if (!element || element.hidden || element.classList.contains('is-hidden')) return false;
-    // getClientRects also checks whether an ancestor is display:none.
-    if (!element.getClientRects().length) return false;
-    const style = window.getComputedStyle(element);
-    return style.display !== 'none' && style.visibility !== 'hidden';
-  }
-  function hasOpenModal_() {
-    // Only top-level modal layers count; nested dialog content is not a separate modal.
-    const overlays = document.querySelectorAll(
-      '.modal-overlay, .hanlin-note-overlay, .hanlin-photo-overlay, [role="dialog"][aria-modal="true"]'
-    );
-    for (const element of overlays) {
-      if (overlayIsActuallyVisible_(element)) return true;
-    }
-    return false;
-  }
-  function reconcileScrollLock_() {
-    if (!document.body || !document.body.classList.contains('modal-open')) return;
-    if (!hasOpenModal_()) document.body.classList.remove('modal-open');
-  }
-  function initializeScrollRecovery_() {
-    reconcileScrollLock_();
-    // The existing app toggles .is-hidden and body.modal-open in many functions.
-    // Observe only class/hidden/style changes and leave existing modal functions intact.
-    let pending = false;
-    const observer = new MutationObserver(function (changes) {
-      if (!document.body.classList.contains('modal-open') || pending) return;
-      if (!changes.some(function (change) {
-        const element = change.target;
-        return element === document.body ||
-          (element instanceof Element && (
-            element.matches('.modal-overlay, .hanlin-note-overlay, .hanlin-photo-overlay, [role="dialog"]')
-          ));
-      })) return;
-      pending = true;
-      queueMicrotask(function () {
-        pending = false;
-        reconcileScrollLock_();
-      });
-    });
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ['class', 'hidden', 'style'],
-      subtree: true
-    });
-    // Covers stale modal-open already present during session restoration.
-    window.addEventListener('pageshow', reconcileScrollLock_);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeScrollRecovery_, { once: true });
-  } else {
-    initializeScrollRecovery_();
-  }
-})();
-</script>
 </body>
 </html>
